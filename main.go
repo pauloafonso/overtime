@@ -7,6 +7,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"time"
 )
 
 func check(e error) {
@@ -67,20 +68,70 @@ func captureFinalHour(str string) string {
 	return strings.Replace(finalHour.FindString(str), "-", "", 1)
 }
 
-func calculateOvertime(validatedRows []validatedRow) {
+func parseRowToDateTime(element validatedRow) rangeDateTime {
+	date := captureDate(element.content)
+	initialHour := captureInitialHour(element.content)
+	finalHour := captureFinalHour(element.content)
+	format := "02/01/2006 15:04"
+	initialParsed, _ := time.Parse(format, date+" "+initialHour)
+	finalParsed, _ := time.Parse(format, date+" "+finalHour)
+	return rangeDateTime{initial: initialParsed, final: finalParsed}
+}
+
+func calculate(validatedRows []validatedRow) []rangeDateTime {
+	sliceDateTimes := make([]rangeDateTime, 0)
 	for _, element := range validatedRows {
-		date := captureDate(element.content)
-		initialHour := captureInitialHour(element.content)
-		finalHour := captureFinalHour(element.content)
-		fmt.Println(date)
-		fmt.Println(initialHour)
-		fmt.Println(finalHour)
+		rangeDateTime := parseRowToDateTime(element)
+		diffPerDay := calculateDiffPerDay(rangeDateTime)
+		time50Time100PerDay := calculateTime50Time100PerDay(diffPerDay)
+		fmt.Println(time50Time100PerDay.day, time50Time100PerDay.time50, time50Time100PerDay.time100)
 	}
+	return sliceDateTimes
+}
+
+func calculateTime50Time100PerDay(d diffPerDay) time50Time100PerDay {
+	time50 := d.diff
+	time100 := 0.00
+	if d.diff > 200 {
+		time50 = 200.00
+		time100 = d.diff - 200.00
+	}
+	return time50Time100PerDay{day: d.day, time50: time50, time100: time100}
+}
+
+type resultDay struct {
+	day     time.Time
+	initial time.Time
+	final   time.Time
+	diff    float64
+	time50  float64
+	time100 float64
+}
+
+type rangeDateTime struct {
+	initial time.Time
+	final   time.Time
+}
+
+func calculateDiffPerDay(r rangeDateTime) diffPerDay {
+	diff := r.final.Sub(r.initial).Minutes()
+	return diffPerDay{day: r.final, diff: diff}
+}
+
+type diffPerDay struct {
+	day  time.Time
+	diff float64
+}
+
+type time50Time100PerDay struct {
+	day     time.Time
+	time50  float64
+	time100 float64
 }
 
 func main() {
 	file := openFile("data/agosto")
 	rows := breakRows(file)
 	validatedRows := validateRows(rows)
-	calculateOvertime(validatedRows)
+	calculate(validatedRows)
 }
