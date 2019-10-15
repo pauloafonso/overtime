@@ -10,6 +10,8 @@ import (
 	"time"
 )
 
+const dateTimeFormat = "02/01/2006 15:04"
+
 func check(e error) {
 	if e != nil {
 		panic(e)
@@ -43,7 +45,9 @@ type validatedRow struct {
 func validateRows(rows []string) []validatedRow {
 	validatedRows := make([]validatedRow, 0)
 	for _, element := range rows {
-		match, _ := regexp.MatchString("^[0-9]{2}/[0-9]{2}/[0-9]{4} [0-9]{2}:[0-9]{2}-[0-9]{2}:[0-9]{2}$", element)
+		match, _ := regexp.MatchString(
+			"^[0-9]{2}/[0-9]{2}/[0-9]{4} [0-9]{2}:[0-9]{2}-[0-9]{2}/[0-9]{2}/[0-9]{4} [0-9]{2}:[0-9]{2}$",
+			element)
 		if match == false {
 			fmt.Println("data/agosto file not validated by regular expressions.")
 			os.Exit(-1)
@@ -53,8 +57,13 @@ func validateRows(rows []string) []validatedRow {
 	return validatedRows
 }
 
-func captureDate(str string) string {
-	matchDate, _ := regexp.Compile("[0-9]{2}/[0-9]{2}/[0-9]{4}")
+func matchInitialDateTime(str string) string {
+	matchDate, _ := regexp.Compile("^[0-9]{2}/[0-9]{2}/[0-9]{4} [0-9]{2}:[0-9]{2}")
+	return matchDate.FindString(str)
+}
+
+func matchFinalDateTime(str string) string {
+	matchDate, _ := regexp.Compile("[0-9]{2}/[0-9]{2}/[0-9]{4} [0-9]{2}:[0-9]{2}$")
 	return matchDate.FindString(str)
 }
 
@@ -68,35 +77,8 @@ func captureFinalHour(str string) string {
 	return strings.Replace(finalHour.FindString(str), "-", "", 1)
 }
 
-func parseRowToDateTime(element validatedRow) rangeDateTime {
-	date := captureDate(element.content)
-	initialHour := captureInitialHour(element.content)
-	finalHour := captureFinalHour(element.content)
-	format := "02/01/2006 15:04"
-	initialParsed, _ := time.Parse(format, date+" "+initialHour)
-	finalParsed, _ := time.Parse(format, date+" "+finalHour)
-	return rangeDateTime{initial: initialParsed, final: finalParsed}
-}
-
-func calculate(validatedRows []validatedRow) []rangeDateTime {
-	sliceDateTimes := make([]rangeDateTime, 0)
-	for _, element := range validatedRows {
-		rangeDateTime := parseRowToDateTime(element)
-		diffPerDay := calculateDiffPerDay(rangeDateTime)
-		time50Time100PerDay := calculateTime50Time100PerDay(diffPerDay)
-		fmt.Println(time50Time100PerDay.day, time50Time100PerDay.time50, time50Time100PerDay.time100)
-	}
-	return sliceDateTimes
-}
-
-func calculateTime50Time100PerDay(d diffPerDay) time50Time100PerDay {
-	time50 := d.diff
-	time100 := 0.00
-	if d.diff > 200 {
-		time50 = 200.00
-		time100 = d.diff - 200.00
-	}
-	return time50Time100PerDay{day: d.day, time50: time50, time100: time100}
+type additionalNight struct {
+	minutes int
 }
 
 type resultDay struct {
@@ -108,30 +90,135 @@ type resultDay struct {
 	time100 float64
 }
 
-type rangeDateTime struct {
+func calculate(validatedRows []validatedRow) []dateTimeInterval {
+	sliceDateTimes := make([]dateTimeInterval, 0)
+	//for _, element := range validatedRows {
+
+	//durationPerDay := calculateDurationPerDay(dateTimeInterval)
+	//
+	//dateTimeInterval.calculateAdditionalNight()
+	// fmt.Println(time50Time100PerDay.day, time50Time100PerDay.time50, time50Time100PerDay.time100, additionalNight.minutes)
+	//}
+	return sliceDateTimes
+}
+
+func parseRowsToDateTimeIntervals(validatedRows []validatedRow) []dateTimeInterval {
+	dateTimeIntervals := make([]dateTimeInterval, 0)
+	for _, element := range validatedRows {
+		initialDateTime := matchInitialDateTime(element.content)
+		finalDateTime := matchFinalDateTime(element.content)
+		initial, _ := time.Parse(dateTimeFormat, initialDateTime)
+		final, _ := time.Parse(dateTimeFormat, finalDateTime)
+		dateTimeIntervals = append(dateTimeIntervals, dateTimeInterval{initial: initial, final: final})
+	}
+	return dateTimeIntervals
+}
+
+func p(a ...interface{}) (n int, err error) {
+	return fmt.Println(a...)
+}
+
+type dateTimeInterval struct {
 	initial time.Time
 	final   time.Time
 }
 
-func calculateDiffPerDay(r rangeDateTime) diffPerDay {
-	diff := r.final.Sub(r.initial).Minutes()
-	return diffPerDay{day: r.final, diff: diff}
+func calculateDurationPerDay(dateTimeIntervals []dateTimeInterval) []*durationPerDay {
+	durationsPerDay := make([]*durationPerDay, 0)
+	var day string
+	for _, dateTimeInterval := range dateTimeIntervals {
+		// calculate the difference duration in minutes
+		diff := dateTimeInterval.final.Sub(dateTimeInterval.initial).Minutes()
+
+		midNight, _ := time.Parse(dateTimeFormat, dateTimeInterval.initial.Format("02/01/2006 ")+"00:00")
+		sixAm, _ := time.Parse(dateTimeFormat, dateTimeInterval.initial.Format("02/01/2006 ")+"06:00")
+
+		// if the initial time is between 06:00 and 00:00, the day of overtime is the same
+		// if the initial time is between 00:00 and 03:00, the day of overtime is one before
+		if dateTimeInterval.initial.Before(midNight) && dateTimeInterval.initial.After(sixAm) {
+			day = dateTimeInterval.initial.AddDate(0, 0, -1).Format("02/01/2006")
+		} else {
+			day = dateTimeInterval.initial.Format("02/01/2006")
+		}
+
+		dayExists := false
+		for _, d := range durationsPerDay {
+			if d.day == day {
+				d.addMinutes(diff)
+				dayExists = true
+				break
+			}
+		}
+		if dayExists == false {
+			// i create my durationPerDay var and what i must append to the slice is its pointer to atualize it before in the nexts iterations
+			d := durationPerDay{day: day, minutes: diff}
+			var dPoint *durationPerDay = &d
+			durationsPerDay = append(durationsPerDay, dPoint)
+			// this is the same: durationsPerDay = append(durationsPerDay, &d)
+		}
+	}
+	return durationsPerDay
 }
 
-type diffPerDay struct {
-	day  time.Time
-	diff float64
+func (d *durationPerDay) addMinutes(diff float64) {
+	d.minutes = d.minutes + diff
 }
 
 type time50Time100PerDay struct {
-	day     time.Time
+	day     string
 	time50  float64
 	time100 float64
+}
+
+func (d durationPerDay) calculateTime50Time100PerDay() time50Time100PerDay {
+	time50 := d.minutes
+	time100 := 0.00
+	if d.minutes > 200 {
+		time50 = 200.00
+		time100 = d.minutes - 200.00
+	}
+	return time50Time100PerDay{day: d.day, time50: time50, time100: time100}
+}
+
+func (r dateTimeInterval) calculateAdditionalNight() {
+	beginAddNight, _ := time.Parse(dateTimeFormat, r.initial.Format("02/01/2006 ")+"22:00")
+	midNight, _ := time.Parse(dateTimeFormat, r.initial.Format("02/01/2006 ")+"00:00")
+	endAddNight, _ := time.Parse(dateTimeFormat, r.initial.Format("02/01/2006 ")+"05:00")
+
+	// if the initial hour is after the 22pm, the whole duration has addNight
+	if r.initial.After(beginAddNight) {
+		r.final.Sub(r.initial).Minutes()
+		return
+	}
+
+	// if the final hour is after the 22pm, there is addNight on duration between 22pm and the final hour
+	if r.final.After(beginAddNight) {
+		r.final.Sub(beginAddNight).Minutes()
+		return
+	}
+
+	// if the final hour is after the 00am and before endAddNight (5am), there is addNight on duration between 00am and the final hour
+	if r.final.After(midNight) && r.final.Before(endAddNight) {
+		r.final.Sub(midNight).Minutes()
+		return
+	}
+
+	//fmt.Println(r.initial.Before(beginAddNight), r.initial, beginAddNight)
+}
+
+type durationPerDay struct {
+	day     string
+	minutes float64
 }
 
 func main() {
 	file := openFile("data/agosto")
 	rows := breakRows(file)
 	validatedRows := validateRows(rows)
-	calculate(validatedRows)
+	dateTimeIntervals := parseRowsToDateTimeIntervals(validatedRows)
+	durationsPerDay := calculateDurationPerDay(dateTimeIntervals)
+	p(durationsPerDay[0].calculateTime50Time100PerDay().time50)
+	p(durationsPerDay[0].calculateTime50Time100PerDay().time100)
+	//fmt.Println(durationPerDay)
+	// calculate(validatedRows)
 }
