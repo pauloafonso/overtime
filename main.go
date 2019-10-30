@@ -65,7 +65,9 @@ func (d dateTimeInterval) getSpecificTimeFromInitialDay(stime string) time.Time 
 
 func (d dateTimeInterval) getCurrentDay() string {
 	// if the initial time is between 06:00 and 00:00, the day of overtime is the same
-	if d.initial.Before(d.getSpecificTimeFromInitialDay("00:00")) && d.initial.After(d.getSpecificTimeFromInitialDay("06:00")) {
+	// if the initial time is after 00 and before 05, is one before
+	// if the initial time is after 06 and before 53:59, is the same
+	if d.initial.After(d.getSpecificTimeFromInitialDay("00:00")) && d.initial.Before(d.getSpecificTimeFromInitialDay("06:00")) {
 		return d.initial.AddDate(0, 0, -1).Format("02/01/2006")
 	}
 	// if the initial time is between 00:00 and 03:00, the day of overtime is one before
@@ -193,6 +195,8 @@ func calculateAdditionalNight(dateTimeIntervals []dateTimeInterval) []*additiona
 		day := dateTimeInterval.getCurrentDay()
 
 		beginAddNight := dateTimeInterval.getSpecificTimeFromInitialDay("22:00")
+		middleNight := dateTimeInterval.getSpecificTimeFromInitialDay("00:00")
+		sixAm := dateTimeInterval.getSpecificTimeFromInitialDay("06:00")
 
 		// (1) if the initial hour is after the 10pm, the whole duration has addNight
 		if dateTimeInterval.initial.After(beginAddNight) {
@@ -214,6 +218,42 @@ func calculateAdditionalNight(dateTimeIntervals []dateTimeInterval) []*additiona
 
 		// if the final hour is after the 10pm, there is addNight on duration between 10pm and the final hour
 		if dateTimeInterval.final.After(beginAddNight) {
+			additional := dateTimeInterval.final.Sub(beginAddNight).Minutes()
+
+			dayExists := false
+			for _, a := range additionalsNight {
+				if a.day == day {
+					dayExists = true
+					a.addAdditionalMinutes(additional)
+					break
+				}
+			}
+			if dayExists == false {
+				additionalsNight = append(additionalsNight, &additionalNight{day: day, minutes: additional})
+			}
+			continue
+		}
+
+		// if the initial hour is after the 00:00 and before 06am, the whole duration has addNight
+		if dateTimeInterval.initial.After(middleNight) && dateTimeInterval.initial.Before(sixAm) {
+			additional := dateTimeInterval.final.Sub(dateTimeInterval.initial).Minutes()
+
+			dayExists := false
+			for _, a := range additionalsNight {
+				if a.day == day {
+					dayExists = true
+					a.addAdditionalMinutes(additional)
+					break
+				}
+			}
+			if dayExists == false {
+				additionalsNight = append(additionalsNight, &additionalNight{day: day, minutes: additional})
+			}
+			continue
+		}
+
+		// for the last verification, if the final is between middlenight and sixAm, and the initial is before 10pm
+		if dateTimeInterval.final.After(middleNight) && dateTimeInterval.final.Before(sixAm) {
 			additional := dateTimeInterval.final.Sub(beginAddNight).Minutes()
 
 			dayExists := false
