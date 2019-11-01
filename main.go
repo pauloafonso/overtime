@@ -74,6 +74,10 @@ func (d dateTimeInterval) getCurrentDay() string {
 	return d.initial.Format("02/01/2006")
 }
 
+func calculateHourValue() float64 {
+	return .52 * 60
+}
+
 func main() {
 	files := getOverTimeFiles()
 
@@ -84,7 +88,10 @@ func main() {
 		dateTimeIntervals := parseRowsToDateTimeIntervals(validatedRows)
 		durationsPerDay := calculateDurationPerDay(dateTimeIntervals)
 		additionsNight := calculateAdditionalNight(dateTimeIntervals)
-		calculateResult(durationsPerDay, additionsNight).makeDataResult()
+		time50value, time100value, additionalNightValue := calculateResult(durationsPerDay, additionsNight).calculateOvertimePay()
+		p("Time 50% value: ", time50value)
+		p("Time 100% value: ", time100value)
+		p("Additional night value: ", additionalNightValue)
 	}
 }
 
@@ -313,6 +320,26 @@ func calculateResult(durationsPerDay []*durationPerDay, additionsNight []*additi
 	return generalResult{days: days}
 }
 
-func (r generalResult) makeDataResult() {
-	p(r)
+func (g generalResult) calculateOvertimePay() (float64, float64, float64) {
+	time50value := 0.00
+	time100value := 0.00
+	additionalNightValue := 0.00
+	for _, r := range g.days {
+		time50value = time50value + calculateTime50Value(r.time50)
+		time100value = time100value + calculateTime100Value(r.time100)
+		additionalNightValue = additionalNightValue + calculateadditionalNightValue(r.additionalNight)
+	}
+	return time50value, time100value, additionalNightValue
+}
+
+func calculateTime50Value(time50 float64) float64 {
+	return time50 * 0.52 * 1.5
+}
+
+func calculateTime100Value(time100 float64) float64 {
+	return time100 * 0.52 * 2
+}
+
+func calculateadditionalNightValue(additionalNight float64) float64 {
+	return additionalNight * 0.52 * .4
 }
