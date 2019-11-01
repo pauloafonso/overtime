@@ -14,6 +14,9 @@ import (
 
 const dateTimeFormat = "02/01/2006 15:04"
 const dirOverTimeData = "data"
+const amountSalary = 6218.1
+const workDays = 22
+const workHours = 180
 
 type durationPerDay struct {
 	day     string
@@ -74,8 +77,8 @@ func (d dateTimeInterval) getCurrentDay() string {
 	return d.initial.Format("02/01/2006")
 }
 
-func calculateHourValue() float64 {
-	return .52 * 60
+func hourValue() float64 {
+	return 6208.1 / 180 / 60
 }
 
 func main() {
@@ -89,9 +92,11 @@ func main() {
 		durationsPerDay := calculateDurationPerDay(dateTimeIntervals)
 		additionsNight := calculateAdditionalNight(dateTimeIntervals)
 		time50value, time100value, additionalNightValue := calculateResult(durationsPerDay, additionsNight).calculateOvertimePay()
+		p("'sobreaviso' 33% value: ", 1100.60)
 		p("Time 50% value: ", time50value)
 		p("Time 100% value: ", time100value)
 		p("Additional night value: ", additionalNightValue)
+		p("final value: ", 1100.60+time50value+time100value+additionalNightValue)
 	}
 }
 
